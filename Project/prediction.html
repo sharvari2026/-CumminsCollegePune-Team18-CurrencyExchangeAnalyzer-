@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exchange Rate Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to right, #b488e4, #9cbef8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        header {
+            background-color: #4a55ab;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+            border-radius: 10px 10px 0 0;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.0em;
+        }
+
+        main {
+            background: #fff;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            padding: 20px;
+            max-width: 900px;
+            width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .form-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            gap: 30px;
+        }
+
+        .form-group {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #283593;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        select:focus,
+        input:focus {
+            border-color: #4caf50;
+            box-shadow: 0 0 5px rgba(76, 175, 80, 0.5);
+            outline: none;
+        }
+
+        button {
+            background-color: #4a55ab;
+            color: #fff;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s, transform 0.2s;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #388e3c;
+            transform: scale(1.05);
+        }
+
+        #exchangeRates {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #highestRate {
+            color: #388e3c;
+            font-weight: bold;
+        }
+
+        #lowestRate {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        #chartContainer {
+            height: 400px;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            padding: 10px;
+            background: #f7f7f7;
+        }
+
+        .duration-btn {
+            background-color: #e3f2fd;
+            color: #0d47a1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.3s;
+        }
+
+        .duration-btn:hover {
+            background-color: #4a55ab;
+            color: #fff;
+        }
+
+        .duration-btn.active {
+            background-color: #4a55ab;
+            color: #fff;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .form-row {
+                flex-direction: column;
+            }
+
+            button,
+            .duration-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <header>
+            <h1>Exchange Rate Dashboard</h1>
+        </header>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="currency1">Currency 1 (USD)</label>
+                <select id="currency1">
+                    <option value="USD">USD</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="currency2">Currency 2</label>
+                <select id="currency2"></select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="fromDate">From Date</label>
+                <input type="date" id="fromDate">
+            </div>
+            <div class="form-group">
+                <label for="toDate">To Date</label>
+                <input type="date" id="toDate">
+            </div>
+        </div>
+
+        <div id="exchangeRates">
+            <p id="highestRate">Highest Rate:</p>
+            <p id="lowestRate">Lowest Rate:</p>
+        </div>
+
+        <button onclick="generateChart()">Generate Chart</button>
+
+        <div id="chartContainer"></div>
+
+        <div style="text-align: center; margin-top: 10px;">
+            <button class="duration-btn" onclick="filterByDuration('weekly')">Weekly</button>
+            <button class="duration-btn" onclick="filterByDuration('monthly')">Monthly</button>
+            <button class="duration-btn" onclick="filterByDuration('quarterly')">Quarterly</button>
+            <button class="duration-btn" onclick="filterByDuration('yearly')">Yearly</button>
+        </div>
+    </main>
+
+    <!-- Script sources for chart rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <script>
+        let exchangeRateData = [];
+        let originalChartData = [];
+        const API_KEY = '6a8064efcbe7bf4371e24883';  // Your actual API key
+        const API_URL = 'https://v6.exchangerate-api.com/v6/';  // Updated API endpoint
+
+        function fetchExchangeRates(currency) {
+            return fetch(`${API_URL}${API_KEY}/latest/${currency}`)
+                .then(response => response.json());
+        }
+
+        function populateCurrencyOptions(currencies) {
+            const currency2Select = document.getElementById('currency2');
+            currency2Select.innerHTML = '';
+
+            currencies.forEach(currency => {
+                const option = document.createElement('option');
+                option.value = currency;
+                option.text = currency;
+                currency2Select.add(option);
+            });
+        }
+
+        function generateChart() {
+            const currency2 = document.getElementById('currency2').value;
+            const fromDate = new Date(document.getElementById('fromDate').value);
+            const toDate = new Date(document.getElementById('toDate').value);
+
+            if (!exchangeRateData.length) {
+                alert('No data available for chart generation.');
+                return;
+            }
+
+            const chartData = originalChartData.filter(entry => {
+                const date = new Date(entry.x);
+                return date >= fromDate && date <= toDate;
+            }).map(entry => ({
+                x: new Date(entry.x),
+                y: entry.y[currency2] ? parseFloat(entry.y[currency2]) : null,
+            })).filter(entry => entry.y !== null);
+
+            if (chartData.length === 0) {
+                alert('Data is not available for the selected date range.');
+                return;
+            }
+
+            const options = {
+                chart: {
+                    type: 'line',
+                    height: 400,
+                    toolbar: {
+                        show: true
+                    },
+                    zoom: {
+                        enabled: true
+                    }
+                },
+                colors: ['#0288d1'],
+                series: [{
+                    name: `${currency2}/USD Exchange Rate`,
+                    data: chartData,
+                }],
+                xaxis: {
+                    type: 'datetime',
+                    labels: {
+                        format: 'yyyy-MM-dd',
+                        style: {
+                            colors: '#333'
+                        }
+                    }
+                },
+                yaxis: {
+                    labels: {
+                        style: {
+                            colors: '#333'
+                        }
+                    }
+                },
+                dataLabels: {
+                    enabled: false
+                },
+                stroke: {
+                    curve: 'smooth',
+                    width: 2,
+                },
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shadeIntensity: 1,
+                        opacityFrom: 0.5,
+                        opacityTo: 0.1,
+                        stops: [0, 100]
+                    }
+                },
+                grid: {
+                    borderColor: '#e0e0e0',
+                }
+            };
+
+            const chart = new ApexCharts(document.querySelector("#chartContainer"), options);
+            chart.render().catch(err => console.error('Chart Render Error:', err));
+        }
+
+        function highlightRates() {
+            const highestRateElement = document.getElementById('highestRate');
+            const lowestRateElement = document.getElementById('lowestRate');
+
+            if (exchangeRateData.length) {
+                const rates = Object.values(exchangeRateData);
+                const highestRate = Math.max(...rates);
+                const lowestRate = Math.min(...rates);
+
+                highestRateElement.textContent = `Highest Rate: ${highestRate}`;
+                lowestRateElement.textContent = `Lowest Rate: ${lowestRate}`;
+            }
+        }
+
+        function filterByDuration(duration) {
+            // Logic to filter the data based on duration and then update the chart
+            alert(`Filter by ${duration} functionality to be implemented.`);
+        }
+
+        // Initialize the dashboard
+        window.onload = function () {
+            fetchExchangeRates('USD')
+                .then(data => {
+                    exchangeRateData = data.conversion_rates;
+                    originalChartData = Object.entries(data.conversion_rates).map(([currency, rate]) => ({
+                        x: new Date(),
+                        y: {
+                            [currency]: rate
+                        }
+                    }));
+                    populateCurrencyOptions(Object.keys(exchangeRateData));
+                    highlightRates();
+                })
+                .catch(err => console.error('Fetch Error:', err));
+        };
+    </script>
+</body>
+
+</html>
